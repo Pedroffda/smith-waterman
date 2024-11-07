@@ -1,5 +1,3 @@
-# Smith-Waterman Algorithm Implementation in Python
-
 def read_input(file_name):
     with open(file_name, 'r') as f:
         lines = f.readlines()
@@ -10,81 +8,110 @@ def read_input(file_name):
     match_score = int(lines[4].strip())
     return seq1, seq2, gap_penalty, mismatch_penalty, match_score
 
-def initialize_matrix(rows, cols):
-    return [[0 for _ in range(cols)] for _ in range(rows)]
+def initialize_matrix(rows, cols, gap_penalty):
+    H = [[0 for _ in range(cols)] for _ in range(rows)]
+    # Inicializar a primeira coluna
+    for i in range(1, rows):
+        H[i][0] = H[i-1][0] + gap_penalty
+    # Inicializar a primeira linha
+    for j in range(1, cols):
+        H[0][j] = H[0][j-1] + gap_penalty
+    return H
 
-def smith_waterman(seq1, seq2, gap_penalty, mismatch_penalty, match_score):
+def smith_waterman_global(seq1, seq2, gap_penalty, mismatch_penalty, match_score):
     m, n = len(seq1), len(seq2)
-    H = initialize_matrix(m+1, n+1)
-    max_score = 0
-    max_pos = None
+    H = initialize_matrix(m+1, n+1, gap_penalty)
 
-    # Scoring matrix calculation
+    # Cálculo da matriz de pontuação
     for i in range(1, m+1):
         for j in range(1, n+1):
-            match = H[i-1][j-1] + (match_score if seq1[i-1] == seq2[j-1] else mismatch_penalty)
+            if seq1[i-1] == seq2[j-1]:
+                diag = H[i-1][j-1] + match_score
+            else:
+                diag = H[i-1][j-1] + mismatch_penalty
             delete = H[i-1][j] + gap_penalty
             insert = H[i][j-1] + gap_penalty
-            H[i][j] = max(0, match, delete, insert)
-            if H[i][j] >= max_score:
-                max_score = H[i][j]
-                max_pos = (i, j)
+            H[i][j] = max(diag, delete, insert)
+    
+    # Encontrar o maior score na última coluna
+    max_score = H[0][n]
+    max_pos = (0, n)
+    for i in range(1, m+1):
+        if H[i][n] > max_score:
+            max_score = H[i][n]
+            max_pos = (i, n)
 
     return H, max_score, max_pos
 
-def traceback(H, seq1, seq2, max_pos, gap_penalty, mismatch_penalty, match_score):
+def traceback(H, seq1, seq2, start_pos, gap_penalty, mismatch_penalty, match_score):
     aligned_seq1 = ''
     aligned_seq2 = ''
-    i, j = max_pos
+    i, j = start_pos
 
-    while H[i][j] != 0:
-        current_score = H[i][j]
-        diagonal_score = H[i-1][j-1]
-        up_score = H[i-1][j]
-        left_score = H[i][j-1]
+    while i > 0 and j > 0:
+        score_current = H[i][j]
+        score_diag = H[i-1][j-1]
+        score_up = H[i-1][j]
+        score_left = H[i][j-1]
 
-        if current_score == diagonal_score + (match_score if seq1[i-1] == seq2[j-1] else mismatch_penalty):
+        if score_current == score_diag + (match_score if seq1[i-1] == seq2[j-1] else mismatch_penalty):
             aligned_seq1 = seq1[i-1] + aligned_seq1
             aligned_seq2 = seq2[j-1] + aligned_seq2
             i -= 1
             j -= 1
-        elif current_score == up_score + gap_penalty:
-            aligned_seq1 = seq1[i-1] + aligned_seq1
-            aligned_seq2 = '-' + aligned_seq2
-            i -= 1
-        elif current_score == left_score + gap_penalty:
+        elif score_current == score_left + gap_penalty:
             aligned_seq1 = '-' + aligned_seq1
             aligned_seq2 = seq2[j-1] + aligned_seq2
             j -= 1
-        else:
-            break
+        else:  # score_current == score_up + gap_penalty
+            aligned_seq1 = seq1[i-1] + aligned_seq1
+            aligned_seq2 = '-' + aligned_seq2
+            i -= 1
+
+    # Preencher os gaps iniciais, se necessário
+    while i > 0:
+        aligned_seq1 = seq1[i-1] + aligned_seq1
+        aligned_seq2 = '-' + aligned_seq2
+        i -= 1
+    while j > 0:
+        aligned_seq1 = '-' + aligned_seq1
+        aligned_seq2 = seq2[j-1] + aligned_seq2
+        j -= 1
 
     return aligned_seq1, aligned_seq2
 
 def print_matrix(H, seq1, seq2):
     print("-----------------------------------------------------------** matrix **")
     print("===========================================================")
-    seq2 = ' ' + seq2
-    header = '     ' + '  '.join(seq2)
-    print(header)
-    for i, row in enumerate(H):
+
+    # Cabeçalho da matriz com a segunda sequência alinhada
+    seq2 = ' ' + seq2  # Adiciona um espaço no início para alinhar com a coluna de rótulos
+    header = '      ' + '    '.join(seq2)  # Adiciona espaçamento entre os caracteres do cabeçalho
+
+    # Iterar de baixo para cima (última linha para a primeira)
+    for i in range(len(H)-1, -1, -1):
         if i == 0:
-            print('  ', '  '.join(map(str, row)))
+            label = '-'
         else:
-            print(seq1[i-1], '  '.join(map(str, row)))
+            label = seq1[i-1]
+        # Formatar cada linha com espaçamento consistente
+        row = f"{seq1[i-1]:<2} " + ' '.join(f"{cell:4}" for cell in H[i])
+        print(row)
+
+    print(header)
     print("===========================================================")
 
 def main():
-    # Read input
+    # Ler entrada
     seq1, seq2, gap_penalty, mismatch_penalty, match_score = read_input('input.txt')
 
-    # Compute Smith-Waterman algorithm
-    H, max_score, max_pos = smith_waterman(seq1, seq2, gap_penalty, mismatch_penalty, match_score)
+    # Executar o algoritmo Needleman-Wunsch
+    H, max_score, max_pos = smith_waterman_global(seq1, seq2, gap_penalty, mismatch_penalty, match_score)
 
-    # Traceback to get alignment
+    # Realizar o traceback
     aligned_seq1, aligned_seq2 = traceback(H, seq1, seq2, max_pos, gap_penalty, mismatch_penalty, match_score)
 
-    # Print results
+    # Imprimir resultados
     print_matrix(H, seq1, seq2)
     print(f"Score = {max_score}")
     print(f"** Match = {match_score} | mismatch = {mismatch_penalty} | Gap = {gap_penalty} **")
